@@ -1,4 +1,4 @@
-import os, sys, hashlib, hmac
+import os, sys, hashlib, hmac, ecdsa
 
 def generateEntropy():
     rng = os.urandom(16)
