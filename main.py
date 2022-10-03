@@ -1,4 +1,5 @@
 import os, sys, hashlib, hmac, ecdsa, codecs
+from bip32 import BIP32
 
 def generateEntropy():
     rng = os.urandom(16)
@@ -19,6 +20,7 @@ def convertBinaryToMnemonic(binary):
     slices = [binary[i:i+11] for i in range(0,len(binary),11)] #Slicing the seed in 11-bits sized slices (total of 12 slices)
 
     words = [word[:-1] for word in open("english.txt")] #Importing the mnemonic english dictionnary (provided by BTC github)
+
     mnemonic = ' '.join(words[int(m,2)] for m in slices) #Getting the corresponding mnemonic word to each slice of the previously sliced seed
 
     return mnemonic
@@ -74,29 +76,94 @@ def getChild(parent, index):
 
 def menu(): 
     terminated = False
+    seed = None
     while not terminated:
         print("Que voulez vous faire ?")
         print("1) Générer une seed")
-        print("2) Récupérer votre seed à partir d'une suite mnemonique")
-        print("3) Récupérer votre Master Private Key et/ou votre Master ChainCode")
-        print("4) Générer une Private Key à partir de son index et/ou de son niveau de dérivation") 
-        print("5) Récupérer une Private Key à partir de son index et de son niveau de dérivation")
+        print("2) Saisir une seed (hexadécimale)")
+        print("3) Récupérer votre seed à partir d'une suite mnemonique")
+        print("4) Extraire votre Master Private Key, votre Master ChainCode ainsi que votre Master Public Key")
+        print("5) Générer une clé enfant à partir de son index et de son niveau de dérivation") 
 
-        input("Votre choix (chiffre) : ",end="")
+        x = input("Votre choix (chiffre) : ")
+        try:
+            ans = int(x)
+        except:
+            input("Mauvaise entrée : veuillez saisir le numéro de l'action de votre choix ( Pressez entrer pour continuer )")
+            os.system("cls")
+            continue
+        if ans > 5 or ans < 1:
+            input("Le chiffre entré est incorrect, veuillez saisir un chiffre correspondant à une action affichée ( Pressez entrer pour continuer )")
+            os.system("cls")
+            continue
+        if ans == 1:
+            seed = generateSeed()
+            print("Voici votre seed en hexadécimal :",seed["Seed"])
+            print("Voici votre suite mnemonique (correspondant à la seed ci-dessus) :",seed["Mnemonic"])
+            print("Vous avez désormais une seed active utilisable pour les prochaines actions !")
+        if ans == 2:
+            seed = input("Veuillez saisir votre seed en hexadécimal : ")
+            try:
+                int(seed,16)
+            except:
+                print("Seed incorrect (hexadécimal obligatioire ou choisissez le choix n°3 pour importer une suite mnémonique)")
+        if ans == 3:
+            m = input("Veuillez saisir votre suite mnemonique : ")
+            while len(m.split()) != 12:
+                print("Votre suite mnemonique doit être composée de 12 mots")
+                m = input("Veuillez la saisir à nouveau : ")
+            try:
+                seed = getSeedFromMnemonic(m)
+            except:
+                seed = None
 
-#seed = generateSeed()
-master = getMaster_privateKey_chainCode("5b56c417303faa3fcba7e57400e120a0ca83ec5a4fc9ffba757fbe63fbd77a89a1a3be4c67196f57c39a88b76373733891bfaba16ed27a813ceed498804c0570")
-#print("BIP39 Mnemonic :",seed["Mnemonic"])
-#print()
-#print("BIP39 Seed :", seed["Seed"])
-private_key = master["privateKey"]
-print("private key :",private_key)
-print("chain code :",master["chainCode"])
-public_key = getPublicKeyFromPrivateKey(private_key)
-print("public key :",public_key)
-chainCode = master["chainCode"]
-index = 0
-child = getChild(master, "0/0")
-publicChild = getPublicKeyFromPrivateKey(child["privateKey"])
-print("public child :",publicChild)
-print(len(bytearray.fromhex(publicChild)))
+            while seed == None:
+                print("Seed incorrect")
+                m = input("Veuillez la saisir à nouveau : ")
+                try:
+                    seed = getSeedFromMnemonic(m)
+                except:
+                    seed = None
+            print("Vous avez désormais une seed active utilisable pour les prochaines actions !")
+        if ans == 4:
+            if seed != None:
+                ans = input("Souhaitez vous utiliser la seed active ? (Y/n) : ").lower()
+                while ans != "y" and ans != "n":
+                    ans = input("Veuillez saisir Y ou n (non sensible à la case) : ").lower()
+                if ans == "n" :
+                    input("Veuillez sélectionner l'action 1 ou 2 pour obtenir une seed active dans le menu ( Pressez entrer pour continuer )")
+                    continue
+            else:
+                input("Veuillez sélectionner l'action 1 ou 2 pour obtenir une seed active dans le menu ( Pressez entrer pour continuer )")
+                continue
+            master = getMaster_privateKey_chainCode(seed["Seed"])
+            print("Votre Master Private Key (hexadécimal) :", master["privateKey"])
+            print("Votre Master Chain Code (hexadécimal) :", master["chainCode"])
+            print("Votre Master Public Key (hexadécimal) :", getPublicKeyFromPrivateKey(master["privateKey"]))
+        if ans == 5:
+            if seed != None:
+                ans = input("Souhaitez vous utiliser la seed active ? (Y/n) : ").lower()
+                while ans != "y" and ans != "n":
+                    ans = input("Veuillez saisir Y ou n (non sensible à la case) : ").lower()
+                if ans == "n" :
+                    input("Veuillez sélectionner l'action 1 ou 2 pour obtenir une seed active dans le menu ( Pressez entrer pour continuer )")
+                    continue
+            else:
+                input("Veuillez sélectionner l'action 1 ou 2 pour obtenir une seed active dans le menu ( Pressez entrer pour continuer )")
+                continue
+            print("Le format pour choisir un niveau de dérivation avec les index de chaque dérivation est : m/index1/index2/index3...")
+            path = "m/"+input("Veuillez saisir le chemin de dérivation désiré : m/")
+            b = BIP32.from_seed(bytearray.fromhex(seed["Seed"]))
+            child = b.get_pubkey_from_path(path).hex()
+            print(f"La clé publique de l'enfant de chemin {path} est (hexa) : {child}")
+        a = input("DONE ( Veuillez presser entrer pour continuer 'q' pour quitter ) ")
+        terminated = a.lower() == 'q'
+        os.system("cls")
+
+
+menu()
+            
+
+
+
+
